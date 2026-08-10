@@ -4,13 +4,19 @@
     publish = "frontend"   # 👈 新增这一行
 
 [[redirects]]
+    from = "/hello"
+    to = "/.netlify/functions/hello"
+    status = 200
+    force = true
+
+[[redirects]]
     from = "/api/*"
     to = "/.netlify/functions/api/:splat"
     status = 200
     force = true
 
 [[redirects]]
-    from = "/hello"
-    to = "/.netlify/functions/hello"
+    from = "/ping"
+    to = "/.netlify/functions/ping"
     status = 200
     force = true
