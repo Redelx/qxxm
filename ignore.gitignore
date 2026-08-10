@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+env/
+
+# 本地测试产生的文件
+.DS_Store
+*.log
