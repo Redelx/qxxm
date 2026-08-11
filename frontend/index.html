@@ -1741,7 +1741,7 @@
             resultLabel.textContent = '⏳ 生成中…';
 
             try {
-                const response = await fetch('/api/transform', {
+                const response = await fetch('https://qxxm-production.up.railway.app/api/transform', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ image: currentBase64, style: "Yi ethnic embroidery style, bright red, yellow, blue, geometric patterns, textured" })
