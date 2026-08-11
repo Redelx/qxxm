@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
-import sys
 import base64
-import time
 import requests
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # 唯一 CORS 配置
 
 # ================= 配置区 =================
 ARK_API_KEY = os.environ.get("ARK_API_KEY")
@@ -19,29 +15,7 @@ if not ARK_API_KEY:
 
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 MODEL = "doubao-seedream-5-0-lite-260128"
-
-# 创建一个带重试机制的 requests session
-session = requests.Session()
-retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
-session.mount('https://', HTTPAdapter(max_retries=retries))
 # ==========================================
-
-# 手动处理 OPTIONS 预检
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        return response
-
-@app.after_request
-def after_request(response):
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    return response
 
 @app.route("/")
 def home():
@@ -60,11 +34,9 @@ def transform_image():
         if not image_base64:
             return jsonify({"success": False, "error": "没有收到图片"}), 400
 
-        # 清理 base64
         image_base64 = image_base64.strip().replace('\n', '').replace('\r', '')
         image_data_uri = f"data:image/jpeg;base64,{image_base64}"
 
-        # 构造请求到火山引擎
         payload = {
             "model": MODEL,
             "prompt": f"将这张图片的风格转换为{style_prompt}。保持原图的内容、构图、物体和布局完全不变，只改变纹理、色彩和艺术风格。",
@@ -82,26 +54,8 @@ def transform_image():
 
         api_url = f"{BASE_URL}/images/generations"
         print(f"⏳ 正在调用 Seedream 5.0 Lite...")
+        response = requests.post(api_url, headers=headers, json=payload, timeout=90)
 
-        # 使用 session 发送请求，设置连接超时 10 秒，读取超时 90 秒
-        try:
-            response = session.post(
-                api_url,
-                headers=headers,
-                json=payload,
-                timeout=(10, 90)  # (connect_timeout, read_timeout)
-            )
-        except requests.exceptions.Timeout:
-            print("❌ 火山引擎 API 请求超时")
-            return jsonify({"success": False, "error": "API 请求超时，请稍后重试"}), 504
-        except requests.exceptions.ConnectionError as e:
-            print(f"❌ 网络连接错误: {e}")
-            return jsonify({"success": False, "error": f"网络连接失败: {str(e)}"}), 503
-        except Exception as e:
-            print(f"❌ 请求异常: {e}")
-            return jsonify({"success": False, "error": f"请求异常: {str(e)}"}), 500
-
-        # 处理响应
         if response.status_code == 200:
             result = response.json()
             image_url = result.get("data", [{}])[0].get("url")
@@ -123,6 +77,6 @@ def transform_image():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"success": False, "error": f"服务器内部错误: {str(e)}"}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # 注意：不要添加 app.run()
