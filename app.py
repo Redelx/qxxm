@@ -1,55 +1,37 @@
 # -*- coding: utf-8 -*-
 import os
-import sys
 import base64
 import requests
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# 初始化 Flask
 app = Flask(__name__)
-CORS(app)
+
+# 显式配置 CORS，允许所有来源和 OPTIONS 方法
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
 # ================= 配置区 =================
+# 从环境变量读取，不再硬编码
 ARK_API_KEY = os.environ.get("ARK_API_KEY")
 if not ARK_API_KEY:
-    # 在函数日志中输出错误
-    print("❌ 环境变量 ARK_API_KEY 未设置")
-    # 但不要让 Flask 启动失败，而是让路由返回错误信息
-    # 我们将在路由中处理
+    raise ValueError("环境变量 ARK_API_KEY 未设置！")
 
 BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 MODEL = "doubao-seedream-5-0-lite-260128"
 # ==========================================
 
-# 手动处理 OPTIONS 预检（作为额外保障）
-@app.before_request
-def handle_preflight():
-    if request.method == "OPTIONS":
-        response = make_response()
-        response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        return response
-
-# 在每次响应后添加 CORS 头
-@app.after_request
-def after_request(response):
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    return response
-
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-    return jsonify({"status": "ok", "message": "API is running"})
+    return "✅ 后端服务已启动！AI 图片生成接口位于 /api/transform"
 
-@app.route('/api/transform', methods=['POST'])
+@app.route('/api/transform', methods=['POST', 'OPTIONS'])
 def transform_image():
-    try:
-        if not ARK_API_KEY:
-            return jsonify({"success": False, "error": "服务器配置错误：ARK_API_KEY 未设置"}), 500
+    # 处理 OPTIONS 预检请求
+    if request.method == 'OPTIONS':
+        return '', 200
 
+    # 正常 POST 逻辑
+    try:
         data = request.json
         image_base64 = data.get("image")
         style_prompt = data.get("style", "彝绣风格，红黄蓝配色，几何纹样，刺绣质感")
@@ -57,11 +39,9 @@ def transform_image():
         if not image_base64:
             return jsonify({"success": False, "error": "没有收到图片"}), 400
 
-        # 清理 base64
         image_base64 = image_base64.strip().replace('\n', '').replace('\r', '')
         image_data_uri = f"data:image/jpeg;base64,{image_base64}"
 
-        # 构造请求到火山引擎
         payload = {
             "model": MODEL,
             "prompt": f"将这张图片的风格转换为{style_prompt}。保持原图的内容、构图、物体和布局完全不变，只改变纹理、色彩和艺术风格。",
@@ -79,7 +59,7 @@ def transform_image():
 
         api_url = f"{BASE_URL}/images/generations"
         print(f"⏳ 正在调用 Seedream 5.0 Lite...")
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        response = requests.post(api_url, headers=headers, json=payload)
 
         if response.status_code == 200:
             result = response.json()
@@ -104,5 +84,16 @@ def transform_image():
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
-# 注意：不要在这里添加 app.run()
-# 函数环境会通过 handler 调用 app
+# 全局错误处理，确保返回 JSON
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({"success": False, "error": "请求方法不允许，请使用 POST"}), 405
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"success": False, "error": "接口地址不存在"}), 404
+
+if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 5000)) # Render 会通过环境变量提供端口
+    app.run(host='0.0.0.0', port=port)      # 监听所有网络接口
