@@ -41,7 +41,7 @@ def transform_image():
             "model": MODEL,
             "prompt": f"将这张图片的风格转换为{style_prompt}。保持原图的内容、构图、物体和布局完全不变，只改变纹理、色彩和艺术风格。",
             "image": image_data_uri,
-            "size": "2K",
+            "size": "1K",
             "output_format": "png",
             "response_format": "url",
             "watermark": False
